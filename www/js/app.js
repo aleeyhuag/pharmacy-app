@@ -1,6 +1,5 @@
 (function(){
 "use strict";
-"use strict";
 var CATS=["Antibiotics","Pain & fever","Malaria","Stomach","Allergy","Vitamins","Chronic care","Other"];
 var FORMS=["Tablets","Capsules","Syrup","Suspension","Injection","Cream or ointment","Drops","Inhaler","Sachet","Other"];
 var PAY=["Cash","Transfer","POS"];
@@ -35,14 +34,99 @@ function copyText(t,msg){
   function fb(){try{var ta=document.createElement("textarea");ta.value=t;ta.style.position="fixed";ta.style.opacity="0";document.body.appendChild(ta);ta.select();var ok=document.execCommand("copy");document.body.removeChild(ta);toast(ok?msg:"Could not copy here")}catch(e){toast("Could not copy here")}}
   try{navigator.clipboard.writeText(t).then(function(){toast(msg)},fb)}catch(e){fb()}
 }
+// Writes a real file and hands it to Android's share sheet (WhatsApp,
+// Gmail, Drive, Bluetooth, ...) so the other side receives an actual
+// .json / .csv / .pdf file, never plain text.
+// data: a UTF-8 string for text files, or base64 for binary (isBase64=true).
+function saveOrShareFile(filename,mimeType,data,isBase64){
+  if(window.AGBridge&&window.AGBridge.shareFile){
+    window.AGBridge.shareFile(filename,data,isBase64).then(function(){toast("Sent "+filename)}).catch(function(){
+      toast("Could not open the share sheet for that file");
+    });
+    return;
+  }
+  // Desktop-browser fallback (for testing outside the installed app):
+  // trigger a normal file download instead.
+  try{
+    var blob;
+    if(isBase64){
+      var bin=atob(data),arr=new Uint8Array(bin.length);
+      for(var i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
+      blob=new Blob([arr],{type:mimeType});
+    }else{
+      blob=new Blob([data],{type:mimeType});
+    }
+    var url=URL.createObjectURL(blob),a=document.createElement("a");
+    a.href=url;a.download=filename;document.body.appendChild(a);a.click();
+    setTimeout(function(){try{document.body.removeChild(a)}catch(e){}URL.revokeObjectURL(url)},1200);
+    toast("Downloaded "+filename);
+  }catch(e){
+    copyText(data,"Could not create the file, copied the text instead");
+  }
+}
+// Small text share, used only where a whole file would be overkill.
 function shareOrCopy(text,filename,copiedMsg){
-  if(window.AGBridge&&window.AGBridge.share){
-    window.AGBridge.share(filename,text).then(function(){toast("Sent")}).catch(function(){copyText(text,copiedMsg)});
+  if(window.AGBridge&&window.AGBridge.shareText){
+    window.AGBridge.shareText(filename,text).then(function(){toast("Sent")}).catch(function(){copyText(text,copiedMsg)});
   }else if(navigator.share){
     navigator.share({title:filename,text:text}).then(function(){toast("Sent")}).catch(function(){});
   }else{
     copyText(text,copiedMsg);
   }
+}
+// Builds a small 80mm-receipt-style PDF for a sale and returns it as a
+// base64 string, or null if the PDF library isn't available.
+function buildReceiptPdfBase64(s){
+  var JSPDF=window.jspdf&&window.jspdf.jsPDF;
+  if(!JSPDF)return null;
+  var st=state.settings,W=80,M=6,LH=5;
+  var discLine=s.discount>0,paidLine=s.paid>0,balLine=s.paid>0&&s.paid<s.total,chgLine=s.paid>0&&s.paid>=s.total&&s.change>0;
+  var totalsLines=1+(discLine?1:0)+1+(paidLine?1:0)+(balLine?1:0)+(chgLine?1:0);
+  var lines=3+1+4+1+(s.items.length*2)+1+totalsLines+1+1;
+  var H=M*2+lines*LH+6;
+  var doc=new JSPDF({unit:"mm",format:[W,H]});
+  var y=M,x=W/2,dash=new Array(34).join("-");
+  function ctr(t,sz,bold){doc.setFont("courier",bold?"bold":"normal");doc.setFontSize(sz||9);doc.text(String(t),x,y,{align:"center"});y+=LH}
+  function kv(l,v,bold){doc.setFont("courier",bold?"bold":"normal");doc.setFontSize(bold?10:8.5);doc.text(String(l),M,y);doc.text(String(v),W-M,y,{align:"right"});y+=LH}
+  function sep(){ctr(dash,8)}
+  ctr(st.name,11,true);
+  if(st.address)ctr(st.address,8);
+  if(st.phone)ctr(st.phone,8);
+  sep();
+  kv("Receipt no.",s.no);
+  kv("Date",fmtDT(s.date));
+  kv("Customer",s.customer);
+  kv("Payment",s.payment);
+  sep();
+  s.items.forEach(function(it){
+    doc.setFont("courier","normal");doc.setFontSize(8.5);
+    doc.text((it.name+" "+it.strength).slice(0,30),M,y);y+=LH;
+    kv("  "+it.qty+" x "+naira(it.price),naira(it.price*it.qty));
+  });
+  sep();
+  kv("Subtotal",naira(s.subtotal));
+  if(discLine)kv("Discount","-"+naira(s.discount));
+  kv("TOTAL",naira(s.total),true);
+  if(paidLine)kv("Received",naira(s.paid));
+  if(balLine)kv("Balance due",naira(s.total-s.paid));
+  if(chgLine)kv("Change",naira(s.change));
+  sep();
+  ctr(st.footer,8);
+  var uri=doc.output("datauristring");
+  return uri.split(",")[1]||null;
+}
+// Exports the price list as a CSV file, ready to open directly in Excel.
+function buildPriceListCsv(){
+  var rows=[["Name","Generic","Brand","Strength","Form","Pack size","Selling price","Buying price","Supplier","Group","Last updated"]];
+  state.meds.forEach(function(m){
+    rows.push([m.name,m.generic,m.brand,m.strength,m.form,m.pack,m.sell,m.buy||"",m.supplier,m.category,fmtDate(m.updated)]);
+  });
+  return rows.map(function(r){
+    return r.map(function(c){
+      var v=String(c==null?"":c);
+      return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;
+    }).join(",");
+  }).join("\r\n");
 }
 
 function mk(name,generic,brand,strength,form,pack,sell,buy,supplier,cat,age,older,notes){
@@ -393,8 +477,8 @@ function receiptSheetHTML(s){
   return '<div class="backdrop" data-action="close"></div><div class="sheet" role="dialog" aria-modal="true" aria-label="Receipt">'+
   '<div class="sh-head"><div><h2>Receipt</h2><p>'+esc(s.no)+'</p></div><button class="x" data-action="close" aria-label="Close">\u2715</button></div>'+
   receiptHTML(s)+
-  '<div class="acts"><button class="primary" style="flex:1" data-action="print">Save or print</button><button class="ghost" data-action="shareReceipt">Send</button></div>'+
-  '<p class="hint" style="text-align:center;margin-top:10px">In the phone app, Send opens WhatsApp, email or Google Drive directly.</p></div>';
+  '<div class="acts"><button class="primary" style="flex:1" data-action="savePdf">Save &amp; send PDF</button><button class="ghost" data-action="copyReceipt">Copy text</button></div>'+
+  '<p class="hint" style="text-align:center;margin-top:10px">Saves a real PDF file and opens WhatsApp, email or Google Drive to send it.</p></div>';
 }
 
 /* ---------- Medicine detail and forms ---------- */
@@ -504,10 +588,15 @@ function renderBackup(){
   '<button class="primary" style="margin-top:14px" data-action="saveSettings">Save details</button></div>'+
   '<div class="card"><h2>Your data</h2><p>Saved on this device, no internet needed.</p><div class="bignum">'+state.meds.length+'</div><p style="margin:4px 0 0">medicines, '+state.sales.length+" receipts</p></div>"+
   '<div class="card"><h2>Save my data</h2><p>So you never lose your prices if the tablet is lost, damaged or replaced.</p>'+
-  '<div class="bighint">Tap the button below. It opens WhatsApp, Google Drive or email, the same way you would send a photo.</div>'+
+  '<div class="bighint">Tap the button below. It saves a backup file and opens WhatsApp, Google Drive or email to send it, the same way you would send a photo.</div>'+
   '<button class="primary" style="width:100%;margin-top:12px" data-action="backup">Send my data somewhere safe</button>'+
-  '<details style="margin-top:14px"><summary class="linkbtn" style="cursor:pointer">More options</summary>'+
-  '<textarea id="bk" aria-label="Backup text" style="margin-top:10px" placeholder="To bring data back from a backup, paste it here."></textarea>'+
+  '<p class="hint" style="margin-top:8px">Saves a .json file with everything: medicines, prices, batches and receipts.</p></div>'+
+  '<div class="card"><h2>Price list for Excel</h2><p>A spreadsheet file with every medicine and its current price, ready to open in Excel or Google Sheets.</p>'+
+  '<button class="ghost" style="width:100%" data-action="exportCsv">Export price list (.csv)</button></div>'+
+  '<div class="card"><h2>Bring data back</h2><p>Choose a backup file (.json) saved earlier to restore your medicines and receipts.</p>'+
+  '<input id="restoreFile" type="file" accept="application/json,.json" aria-label="Choose a backup file">'+
+  '<details style="margin-top:14px"><summary class="linkbtn" style="cursor:pointer">Paste backup text instead</summary>'+
+  '<textarea id="bk" aria-label="Backup text" style="margin-top:10px" placeholder="Paste the backup text here."></textarea>'+
   '<div class="row" style="margin-top:10px"><button class="ghost" data-action="restore">Bring this data back</button></div></details></div>'+
   '<div class="card"><h2>Demo data</h2><p>Put the sample medicines and receipts back the way they started.</p><button class="ghost" data-action="reset">Reset demo data</button></div>';
 }
@@ -523,6 +612,17 @@ function switchTab(t){
   window.scrollTo(0,0);
 }
 
+function applyRestore(parsed){
+  var arr=Array.isArray(parsed)?parsed:parsed&&parsed.medicines;
+  var clean=Array.isArray(arr)?sanitize(arr):[];
+  if(!clean.length){toast("No medicines found in that backup");return}
+  askConfirm("Replace all data?","Your current medicines and receipts will be replaced with this backup.","Yes, bring it back",function(){
+    state.meds=clean;persist();
+    if(parsed&&Array.isArray(parsed.sales)){state.sales=parsed.sales;persistSales()}
+    if(parsed&&parsed.settings&&parsed.settings.name){state.settings=parsed.settings;saveJSON(CKEY,state.settings)}
+    refresh();renderBackup();toast(clean.length+" medicines restored");
+  });
+}
 function sanitize(a){
   var out=[];
   a.forEach(function(x){
@@ -599,11 +699,14 @@ function act(a,btn){
     state.sales.unshift(sale);persistSales();state.sale=blankSale();renderSales();
     state.receiptId=sale.id;state.sheet="receipt";renderSheet();
   }
-  else if(a==="print"){
-    toast("Opening print. In the phone app this saves a PDF file.");
-    try{window.print()}catch(e){toast("Saving works in the phone app. Try Send here.")}
+  else if(a==="savePdf"){
+    var rs=findSale(state.receiptId);
+    if(!rs)return;
+    var b64=buildReceiptPdfBase64(rs);
+    if(b64)saveOrShareFile(rs.no+".pdf","application/pdf",b64,true);
+    else{toast("Could not build the PDF, sending text instead");shareOrCopy(receiptText(rs),rs.no,"Receipt copied. Paste it into WhatsApp.")}
   }
-  else if(a==="shareReceipt"){var rs=findSale(state.receiptId);if(rs)shareOrCopy(receiptText(rs),rs.no,"Receipt copied. Paste it into WhatsApp.")}
+  else if(a==="copyReceipt"){var rs2=findSale(state.receiptId);if(rs2)copyText(receiptText(rs2),"Receipt copied. Paste it into WhatsApp.")}
   else if(a==="savePrice"){
     m=findMed(state.openId);var np=money($("#np").value);
     if(!np){toast("Type the new price first");$("#np").focus();return}
@@ -665,22 +768,20 @@ function act(a,btn){
   }
   else if(a==="backup"){
     var txt=JSON.stringify({app:"pharmacy-price-book",version:2,exported:new Date().toISOString(),settings:state.settings,medicines:state.meds,sales:state.sales},null,1);
-    var el=document.getElementById("bk");if(el)el.value=txt;
-    shareOrCopy(txt,(state.settings.name||"pharmacy")+"-backup","Backup copied. Paste it into WhatsApp or a note.");
+    var stamp=new Date().toISOString().slice(0,10);
+    var fname=((state.settings.name||"pharmacy").replace(/[^a-z0-9]+/gi,"-").toLowerCase())+"-backup-"+stamp+".json";
+    saveOrShareFile(fname,"application/json",txt,false);
+  }
+  else if(a==="exportCsv"){
+    var csv=buildPriceListCsv();
+    var stamp2=new Date().toISOString().slice(0,10);
+    saveOrShareFile("price-list-"+stamp2+".csv","text/csv",csv,false);
   }
   else if(a==="restore"){
     var raw=$("#bk").value.trim();
     if(!raw){toast("Paste your backup into the box first");return}
     var parsed;try{parsed=JSON.parse(raw)}catch(e){toast("That does not look like a backup");return}
-    var arr=Array.isArray(parsed)?parsed:parsed&&parsed.medicines;
-    var clean=Array.isArray(arr)?sanitize(arr):[];
-    if(!clean.length){toast("No medicines found in that backup");return}
-    askConfirm("Replace all data?","Your current medicines and receipts will be replaced with this backup.","Yes, bring it back",function(){
-      state.meds=clean;persist();
-      if(parsed&&Array.isArray(parsed.sales)){state.sales=parsed.sales;persistSales()}
-      if(parsed&&parsed.settings&&parsed.settings.name){state.settings=parsed.settings;saveJSON(CKEY,state.settings)}
-      refresh();renderBackup();toast(clean.length+" medicines restored");
-    });
+    applyRestore(parsed);
   }
   else if(a==="reset"){
     askConfirm("Reset to demo data?","Your current medicines and receipts will be replaced with the sample data.","Yes, reset",function(){
@@ -705,7 +806,21 @@ document.addEventListener("input",function(e){
   else if(id==="s_disc"){state.sale.disc=e.target.value;renderTotals()}
   else if(id==="s_paid"){state.sale.paid=e.target.value;renderTotals()}
 });
-document.addEventListener("change",function(e){if(e.target.id==="s_pay")state.sale.payment=e.target.value});
+document.addEventListener("change",function(e){
+  if(e.target.id==="s_pay"){state.sale.payment=e.target.value;return}
+  if(e.target.id==="restoreFile"){
+    var file=e.target.files&&e.target.files[0];
+    if(!file)return;
+    var reader=new FileReader();
+    reader.onload=function(){
+      var parsed;try{parsed=JSON.parse(String(reader.result))}catch(err){toast("That file is not a valid backup");e.target.value="";return}
+      applyRestore(parsed);
+      e.target.value="";
+    };
+    reader.onerror=function(){toast("Could not read that file")};
+    reader.readAsText(file);
+  }
+});
 
 refresh();
 if(!loadJSON(OKEY)){startOnb()}
