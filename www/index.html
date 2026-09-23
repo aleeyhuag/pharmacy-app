@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pharmacy Price Book</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">
+    <div class="logo" aria-hidden="true">&#8478;</div>
+    <div class="brandtext">
+      <div class="title" id="appTitle">Pharmacy Price Book</div>
+      <div class="sub" id="count"></div>
+    </div>
+  </div>
+
+  <section id="view-prices">
+    <div class="sticky">
+      <div class="searchrow">
+        <input id="q" type="search" placeholder="Type a medicine name" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" aria-label="Search medicines">
+        <button class="add" data-action="add">+ Add</button>
+      </div>
+      <div class="chips" id="chips"></div>
+    </div>
+    <div class="info" id="info"></div>
+    <ul class="list" id="results"></ul>
+  </section>
+
+  <section id="view-expiry" hidden></section>
+  <section id="view-sales" hidden></section>
+  <section id="view-backup" hidden></section>
+</div>
+
+<nav class="tabs" aria-label="Main">
+  <button data-action="tab" data-tab="prices" aria-current="page"><span class="ic">&#128337;</span>Prices</button>
+  <button data-action="tab" data-tab="expiry"><span class="ic">&#9200;</span>Expiry</button>
+  <button data-action="tab" data-tab="sales"><span class="ic">&#128179;</span>Sales</button>
+  <button data-action="tab" data-tab="backup"><span class="ic">&#128190;</span>Save data</button>
+</nav>
+<div id="sheet-root"></div>
+<div id="confirm-root"></div>
+<div id="onb-root"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="js/capacitor-bridge.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

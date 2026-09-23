@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Pharmacy Price Book</string>
+    <string name="title_activity_main">Pharmacy Price Book</string>
+    <string name="package_name">com.agkomputech.pharmacyprice</string>
+    <string name="custom_url_scheme">com.agkomputech.pharmacyprice</string>
+</resources>
