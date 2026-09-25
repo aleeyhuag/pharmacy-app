@@ -34,6 +34,7 @@ button{font-family:inherit}
 .net .dot{width:9px;height:9px;border-radius:50%;background:var(--ok)}
 .net.off .dot{background:var(--muted)}
 .note{background:var(--soft);border-radius:12px;padding:10px 14px;font-size:14px;margin:4px 0 6px}
+button.note{display:block;width:100%;text-align:left;border:0;cursor:pointer;font:inherit;color:inherit}
 
 .sticky{position:sticky;top:env(safe-area-inset-top,0px);background:var(--bg);padding:6px 0 8px;z-index:5}
 .searchrow{display:flex;gap:8px}

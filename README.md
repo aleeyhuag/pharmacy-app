@@ -90,3 +90,30 @@ future, this can be upgraded to a proper on-device database.
 - Each receipt's **Save & send PDF** builds a real PDF (via a bundled
   copy of `jsPDF` — no internet needed) and shares that file the same
   way. "Copy text" is kept as a manual fallback only.
+
+## Sample (demo) data
+
+The app ships with 28 sample medicines and 3 sample receipts so the
+screen isn't empty on first open. Every seeded item is tagged
+internally (`demo: true`) so it can be told apart from anything the
+pharmacy actually enters.
+
+The **Save data** tab shows a **"Delete sample data"** button only
+while sample items remain — it removes only the tagged demo items,
+never the pharmacy's own entries, and asks for confirmation first.
+There is deliberately no "reset to demo data" button anymore: it
+used to be possible to wipe real data back to the sample set by
+mistake, which is exactly the kind of thing an untrained or
+unauthorized user could trigger without meaning to.
+
+## Backup reminder
+
+The app tracks the last time "Send my data somewhere safe" was used
+(`ag-pharmacy-last-backup-v1` in local storage) and the date it was
+first installed. If it's been 7 or more days since the last backup
+(or since install, if there's never been one), a banner appears at
+the top of the Prices screen and a small "!" badge appears on the
+Save data tab — both link straight to the Save data screen. The
+7-day threshold is one constant (`REMIND_DAYS` near the top of
+`www/js/app.js`) — change it to 3 there if you'd rather nudge more
+often.

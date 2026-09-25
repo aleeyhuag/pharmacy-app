@@ -131,7 +131,7 @@ function buildPriceListCsv(){
 
 function mk(name,generic,brand,strength,form,pack,sell,buy,supplier,cat,age,older,notes){
   var hist=[{price:sell,date:ago(age)}].concat((older||[]).map(function(o){return{price:o[1],date:ago(o[0])}}));
-  return{id:nid(),name:name,generic:generic,brand:brand,strength:strength,form:form,pack:pack,sell:sell,buy:buy,supplier:supplier,category:cat,notes:notes||"",updated:ago(age),history:hist,batches:[]};
+  return{id:nid(),name:name,generic:generic,brand:brand,strength:strength,form:form,pack:pack,sell:sell,buy:buy,supplier:supplier,category:cat,notes:notes||"",updated:ago(age),history:hist,batches:[],demo:true};
 }
 function seedBase(){return[
   mk("Amoxicillin","Amoxicillin","Amoxil","500mg","Capsules","20 capsules",4500,3800,"Emzor Distributors","Antibiotics",3,[[40,4200],[95,3900]],"Keep below 25\u00B0C"),
@@ -223,7 +223,7 @@ function seedSales(){
     if(!items.length)return null;
     var d=new Date(Date.now()-daysAgo*DAY);d.setHours(hrs,17,0,0);
     var total=sub-disc;
-    return{id:nid(),no:"R-"+pad(no,4),date:d.toISOString(),customer:cust,payment:pay,items:items,subtotal:sub,discount:disc,total:total,paid:paid,change:paid>total?paid-total:0};
+    return{id:nid(),no:"R-"+pad(no,4),date:d.toISOString(),customer:cust,payment:pay,items:items,subtotal:sub,discount:disc,total:total,paid:paid,change:paid>total?paid-total:0,demo:true};
   }
   return[
     mkSale(3,0,9,"Mrs Adaeze Okafor","Cash",[["Paracetamol",2],["Vitamin C",1]],0,10000),
@@ -234,6 +234,29 @@ function seedSales(){
 var salesStored=loadJSON(SKEY);
 if(Array.isArray(salesStored)){state.sales=salesStored}else{state.sales=seedSales();persistSales()}
 
+function demoCount(){
+  return{meds:state.meds.filter(function(x){return x.demo}).length,sales:state.sales.filter(function(x){return x.demo}).length};
+}
+var FRKEY="ag-pharmacy-first-run-v1";
+var LBKEY="ag-pharmacy-last-backup-v1";
+var REMIND_DAYS=7;
+var firstRun=loadJSON(FRKEY);
+if(!firstRun){firstRun=new Date().toISOString();saveJSON(FRKEY,firstRun)}
+function lastBackup(){return loadJSON(LBKEY)}
+function daysSince(iso){return Math.floor((Date.now()-new Date(iso).getTime())/DAY)}
+function backupOverdue(){
+  var lb=lastBackup();
+  return daysSince(lb||firstRun)>=REMIND_DAYS;
+}
+function backupStatusText(){
+  var lb=lastBackup();
+  if(!lb)return "You have not sent a backup yet. Do it now, then aim for once a week.";
+  var d=daysSince(lb);
+  if(d===0)return "Backed up today. Nicely done.";
+  if(d===1)return "Last backup was yesterday.";
+  return "Last backup was "+d+" days ago.";
+}
+function markBackedUp(){saveJSON(LBKEY,new Date().toISOString())}
 function findMed(id){for(var i=0;i<state.meds.length;i++)if(state.meds[i].id===id)return state.meds[i];return null}
 function findSale(id){for(var i=0;i<state.sales.length;i++)if(state.sales[i].id===id)return state.sales[i];return null}
 function ageDays(m){return Math.max(0,Math.floor((Date.now()-new Date(m.updated).getTime())/DAY))}
@@ -336,9 +359,21 @@ function renderTabs(){
   state.meds.forEach(function(m){(m.batches||[]).forEach(function(b){if(b.expiry&&daysLeft(b.expiry)<=30)n++})});
   var b=$('.tabs [data-tab="expiry"]');
   b.innerHTML='<span class="ic">&#9200;</span>Expiry'+(n?'<span class="bd">'+n+"</span>":"");
+  var overdue=backupOverdue();
+  var sb=$('.tabs [data-tab="backup"]');
+  sb.innerHTML='<span class="ic">&#128190;</span>Save data'+(overdue?'<span class="bd">!</span>':"");
+}
+function renderBackupNote(){
+  var el=$("#backupNote");
+  if(backupOverdue()){
+    el.hidden=false;
+    el.innerHTML="\u26A0\uFE0F "+backupStatusText()+" Tap to save your data now.";
+  }else{
+    el.hidden=true;
+  }
 }
 function refresh(){
-  renderHeader();renderCount();renderChips();renderResults();renderTabs();
+  renderHeader();renderCount();renderChips();renderResults();renderTabs();renderBackupNote();
   if(state.tab==="expiry")renderExpiry();
 }
 
@@ -577,7 +612,7 @@ function yesConfirm(){var fn=state.confirm&&state.confirm.onYes;state.confirm=nu
 
 /* ---------- Save data tab ---------- */
 function renderBackup(){
-  var st=state.settings;
+  var st=state.settings,dc=demoCount();
   $("#view-backup").innerHTML=
   '<div class="card"><h2>Pharmacy name</h2><p>Shown at the top of the app and on every receipt.</p>'+
   fieldHTML("c_name","Pharmacy name",st.name,'autocomplete="off"')+
@@ -588,9 +623,9 @@ function renderBackup(){
   '<button class="primary" style="margin-top:14px" data-action="saveSettings">Save details</button></div>'+
   '<div class="card"><h2>Your data</h2><p>Saved on this device, no internet needed.</p><div class="bignum">'+state.meds.length+'</div><p style="margin:4px 0 0">medicines, '+state.sales.length+" receipts</p></div>"+
   '<div class="card"><h2>Save my data</h2><p>So you never lose your prices if the tablet is lost, damaged or replaced.</p>'+
-  '<div class="bighint">Tap the button below. It saves a backup file and opens WhatsApp, Google Drive or email to send it, the same way you would send a photo.</div>'+
+  '<div class="bighint">'+backupStatusText()+'</div>'+
   '<button class="primary" style="width:100%;margin-top:12px" data-action="backup">Send my data somewhere safe</button>'+
-  '<p class="hint" style="margin-top:8px">Saves a .json file with everything: medicines, prices, batches and receipts.</p></div>'+
+  '<p class="hint" style="margin-top:8px">Saves a .json file with everything: medicines, prices, batches and receipts. Aim to do this at least once a week.</p></div>'+
   '<div class="card"><h2>Price list for Excel</h2><p>A spreadsheet file with every medicine and its current price, ready to open in Excel or Google Sheets.</p>'+
   '<button class="ghost" style="width:100%" data-action="exportCsv">Export price list (.csv)</button></div>'+
   '<div class="card"><h2>Bring data back</h2><p>Choose a backup file (.json) saved earlier to restore your medicines and receipts.</p>'+
@@ -598,7 +633,7 @@ function renderBackup(){
   '<details style="margin-top:14px"><summary class="linkbtn" style="cursor:pointer">Paste backup text instead</summary>'+
   '<textarea id="bk" aria-label="Backup text" style="margin-top:10px" placeholder="Paste the backup text here."></textarea>'+
   '<div class="row" style="margin-top:10px"><button class="ghost" data-action="restore">Bring this data back</button></div></details></div>'+
-  '<div class="card"><h2>Demo data</h2><p>Put the sample medicines and receipts back the way they started.</p><button class="ghost" data-action="reset">Reset demo data</button></div>';
+  (dc.meds+dc.sales>0?'<div class="card"><h2>Sample data</h2><p>This device still has '+dc.meds+' example medicines and '+dc.sales+' example receipts from the demo. Delete them once you are ready to use the app for real, so no one can mistake them for actual stock.</p><button class="ghost danger" data-action="clearDemo">Delete sample data</button></div>':"");
 }
 function switchTab(t){
   state.tab=t;
@@ -771,6 +806,7 @@ function act(a,btn){
     var stamp=new Date().toISOString().slice(0,10);
     var fname=((state.settings.name||"pharmacy").replace(/[^a-z0-9]+/gi,"-").toLowerCase())+"-backup-"+stamp+".json";
     saveOrShareFile(fname,"application/json",txt,false);
+    markBackedUp();refresh();renderBackup();
   }
   else if(a==="exportCsv"){
     var csv=buildPriceListCsv();
@@ -783,9 +819,12 @@ function act(a,btn){
     var parsed;try{parsed=JSON.parse(raw)}catch(e){toast("That does not look like a backup");return}
     applyRestore(parsed);
   }
-  else if(a==="reset"){
-    askConfirm("Reset to demo data?","Your current medicines and receipts will be replaced with the sample data.","Yes, reset",function(){
-      state.meds=seed();persist();state.sales=seedSales();persistSales();state.sale=blankSale();refresh();renderBackup();toast("Demo data restored");
+  else if(a==="clearDemo"){
+    var n=demoCount();
+    askConfirm("Delete sample data?","Removes the "+n.meds+" example medicines and "+n.sales+" example receipts used for the demo. Anything you've added yourself is not touched.","Yes, delete sample data",function(){
+      state.meds=state.meds.filter(function(x){return !x.demo});
+      state.sales=state.sales.filter(function(x){return !x.demo});
+      persist();persistSales();refresh();renderBackup();toast("Sample data deleted");
     });
   }
   else if(a==="cancelConfirm"){cancelConfirm()}
