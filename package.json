@@ -4,7 +4,8 @@
   "description": "Offline pharmacy price book, expiry tracker and receipt app",
   "scripts": {
     "sync": "cap sync android",
-    "open:android": "cap open android"
+    "open:android": "cap open android",
+    "icon": "capacitor-assets generate --android"
   },
   "dependencies": {
     "@capacitor/android": "^6.1.2",
@@ -14,6 +15,7 @@
     "jspdf": "^4.2.1"
   },
   "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
     "@capacitor/cli": "^6.1.2"
   }
 }

@@ -117,3 +117,23 @@ Save data tab — both link straight to the Save data screen. The
 7-day threshold is one constant (`REMIND_DAYS` near the top of
 `www/js/app.js`) — change it to 3 there if you'd rather nudge more
 often.
+
+## App icon
+
+The launcher icon is a bold white "Rx" on the app's brand teal, generated
+from source files in `assets/` (`icon.png`, `icon-foreground.png`,
+`icon-background.png`, plus `splash.png` / `splash-dark.png`). It covers
+both older Android's flat icon and newer Android's adaptive icon (the
+shape the system masks into a circle, squircle, etc.).
+
+To change the artwork later: replace the files in `assets/` with new
+1024x1024 PNGs (same names), then run:
+
+```
+npm install
+npm run icon
+```
+
+That regenerates every density folder under `android/app/src/main/res/`
+automatically — no manual resizing needed. Run `npx cap sync android`
+afterwards as usual before rebuilding.

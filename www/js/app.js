@@ -206,7 +206,7 @@ function blankSale(){return{cart:[],customer:"",payment:"Cash",disc:"",paid:"",m
 
 var meds0=loadJSON(KEY);
 var state={
-  meds:(Array.isArray(meds0)&&meds0.length)?meds0:seed(),
+  meds:Array.isArray(meds0)?meds0:seed(),
   sales:[],settings:loadJSON(CKEY)||DEFAULT_SETTINGS,
   q:"",cat:"All",tab:"prices",offline:false,
   sheet:null,openId:null,receiptId:null,draft:null,errs:{},
